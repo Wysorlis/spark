@@ -3,11 +3,34 @@
 import numpy as np
 import pandas as pd
 
+
+def softmax(layer_ouput):
+    # Soustraire c = max(h) évite le débordement des exponentielles.
+    # Cela ne change pas Softmax : le facteur exp(-c) s'annule.
+    #
+    # exp(h_i - c) / sum_j(exp(h_j - c))
+    # = [exp(-c) * exp(h_i)] / [exp(-c) * sum_j(exp(h_j))]
+    # = exp(h_i) / sum_j(exp(h_j))
+    exp_layer_ouput = np.exp(layer_ouput - np.max(layer_ouput))
+    y_hat = exp_layer_ouput / exp_layer_ouput.sum()
+
+    return y_hat
+
+def identity(z):
+    return z
+
+def relu(layer_ouput):
+    return np.maximum(0, layer_ouput)
+
+# def relu_derivative(layer_ouput):
+#     return np.maximum(layer_ouput)
+
 class Layer:
-    def __init__(self, width: int, previous_layer_width: int):
+    def __init__(self, width: int, previous_layer_width: int, activation_function: callable):
         self.width = width
         self.weights = np.zeros((width, previous_layer_width))
         self.biases = np.zeros(width)
+        self.activation_function = activation_function
         print(self.weights.shape)
         # exit()
 
@@ -33,26 +56,33 @@ class NeuralNetwork:
             'loss': [],
         }
 
-    def add_layer(self, layer_width: Layer):
+    def add_layer(self, layer_width: int, activation_function: callable=identity):
+        # Si on a pas déjà des Layers alors la taille correspond aux paramètres d'entrées x
         if not self.layers:
-            self.layers.append(Layer(width=layer_width, previous_layer_width=self.inputs_size))
+            self.layers.append(Layer(width=layer_width, previous_layer_width=self.inputs_size, activation_function=activation_function))
             return
         
         previous_layer_width = self.layers[-1].width
         self.layers.append(
             Layer(width=layer_width,
-                  previous_layer_width=previous_layer_width
+                  previous_layer_width=previous_layer_width,
+                  activation_function=activation_function
                  ))
 
-    def forward(self, input_value):
-        if input_value != self.inputs_size:
-            raise ValueError("L'entrée doit avoir la même taile que la même forme que ({self.inputs_size})")
+    def forward(self, input_values):
+        current = np.asarray(input_values, dtype=float)
 
-        out = self.weights
-
-        for layer in layers:
-            layer_results = layer.weights
-
+        if current.shape != (self.inputs_size,):
+            raise ValueError(
+                f"Forme attendue : ({self.inputs_size},), "
+                f"forme reçue : {current.shape}."
+            )
+        
+        for layer in self.layers:
+            z = layer.weights @  current + layer.biases
+            current = layer.activation_function(z)
+            
+        return current
 
     def verbose(self, is_verbose: bool):
         self.is_verbose = is_verbose
@@ -63,61 +93,72 @@ class NeuralNetwork:
 
         pd.set_option('display.width', None)
         pd.set_option("display.float_format", lambda x: f"{x:.3g}")
+        
+        for i in range(n_steps):
+            x = tests[i % sample_size]
+            y = ys[i % sample_size]
 
-        for layer in self.layers:
-            # weights = np.array([weight for layer in self.layers for weight in layer.weights])
+            # 1) Calcul de la prédiction
+            current_layer = x
 
-            # print(weights)
-            
-            for i in range(n_steps):
-                test = tests[i % sample_size]
-                y = ys[i % sample_size]
+            for layer in self.layers:
+                layer.input = current_layer
 
-                x = test
-                # print(layer.weights)
+                layer.z = layer.weights @  current_layer + layer.biases
 
-                h = np.dot(layer.weights, x) + layer.biases
+                layer.output = layer.activation_function(layer.z)
+                current_layer = layer.output
 
-                # Soustraire c = max(h) évite le débordement des exponentielles.
-                # Cela ne change pas Softmax : le facteur exp(-c) s'annule.
-                #
-                # exp(h_i - c) / sum_j(exp(h_j - c))
-                # = [exp(-c) * exp(h_i)] / [exp(-c) * sum_j(exp(h_j))]
-                # = exp(h_i) / sum_j(exp(h_j))
-                exp_h = np.exp(h - np.max(h))
-                y_hat = exp_h / exp_h.sum()
+            y_hat = current_layer
 
-                loss = - np.log(y_hat)
+            loss = - np.log(y_hat)
 
-                dLdh = y_hat - y
+            # 2) Calculer les gradients
+            dLdz = y_hat - y
+            for index, layer in reversed(list(enumerate(self.layers))):
+                
+                layer.grad_weights = np.outer(dLdz, layer.input)
+                layer.grad_biases = dLdz.copy()
 
-                grad_weights = np.outer(dLdh, x)
-                grad_biases = dLdh
+                if index == 0:
+                    break  # Plus de couche précédente à traiter.
 
-                # print("layer.weights.shape", layer.weights.shape)
-                # print("layer.weights", layer.weights)
+                # L'entrée de cette couche est la sortie de la précédente.
+                dLda = layer.weights.T @ dLdz
 
-                # print("grad_weights.shape", grad_weights.shape)
-                # print("grad_biagrad_weightsses", grad_weights)
+                previous = self.layers[index - 1]
+                activation = previous.activation_function
+                a = previous.output
+
+                if activation is identity:
+                    dLdz = dLda
+
+                elif activation is relu:
+                    dLdz = dLda * (previous.z > 0)
+
+                elif activation is softmax:
+                    # Softmax cachée : ses sorties sont interdépendantes.
+                    dLdz = a * (dLda - np.dot(dLda, a))
+
+            # 3) Mises à jours des poids et biais
+            for layer in self.layers:
+                layer.weights -= self.learning_rate * layer.grad_weights
+                layer.biases -= self.learning_rate * layer.grad_biases
 
 
-                self.data['x'].append(np.round(x, 3))
-                self.data['y'].append(y)
-                self.data['w'].append(np.round(layer.weights, 3))
-                self.data['b'].append(np.round(layer.biases, 3))
-                self.data['h'].append(np.round(h, 3))
-                self.data['y_hat'].append(np.round(y_hat, 3))
-                self.data['grad_weights'].append(np.round(grad_weights, 3))
-                self.data['grad_biases'].append(np.round(grad_biases, 3))
-                self.data['loss'].append(np.round(loss, 3))
+            self.data['x'].append(np.round(x, 3))
+            self.data['y'].append(y)
+            # self.data['w'].append(np.round(layer.weights, 3))
+            # self.data['b'].append(np.round(layer.biases, 3))
+            # self.data['h'].append(np.round(h, 3))
+            self.data['y_hat'].append(np.round(y_hat, 3))
+            # self.data['grad_weights'].append(np.round(grad_weights, 3))
+            # self.data['grad_biases'].append(np.round(grad_biases, 3))
+            self.data['loss'].append(np.round(loss, 3))
 
-                layer.weights -= self.learning_rate * grad_weights
-                layer.biases -= self.learning_rate * grad_biases
 
-                if self.is_verbose:
-                    self.print()
-
-            # self.weights = weights
+            if self.is_verbose:
+                print(f"Étape {i + 1} : perte = {loss:.6f}")
 
         return self.data['loss']
     
