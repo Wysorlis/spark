@@ -14,7 +14,20 @@ def data_test() -> list:
               [+1.0, 0.0]
               ]))
 
-def data_test_new() -> list:
+def data_test_xor() -> list:
+    return (np.array([
+        [-1.0, -1.0],
+        [-1.0, 1.0],
+        [1.0, -1.0],
+        [1.0, 1.0],
+    ]),
+    np.array([[1.0, 0.0], # (-1, -1)
+              [0.0, 1.0], # (-1, +1)
+              [0.0, 1.0], # (+1, -1)
+              [1.0, 0.0], # (+1, +1)
+              ]))
+
+def data_test_paris_berlin_longitude() -> list:
     return (np.array([
             [2.351],
             [2.294],
@@ -25,6 +38,24 @@ def data_test_new() -> list:
               [1.0, 0.0],
               [0.0, 1.0],
               [0.0, 1.0]
+              ]))
+
+
+def data_test_paris_berlin_madrid_longitude() -> list:
+    return (np.array([
+            [0.512],
+            [0.541],
+            [2.351],
+            [2.294],
+            [13.405],
+            [13.378]
+    ]),
+    np.array([[1.0, 0.0, 0.0],
+              [1.0, 0.0, 0.0],
+              [0.0, 1.0, 0.0],
+              [0.0, 1.0, 0.0],
+              [0.0, 0.0, 1.0],
+              [0.0, 0.0, 1.0]
               ]))
 
 def data_test_more() -> list:

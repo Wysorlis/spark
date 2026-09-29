@@ -31,8 +31,17 @@ class Layer:
         self.weights = np.zeros((width, previous_layer_width))
         self.biases = np.zeros(width)
         self.activation_function = activation_function
-        print(self.weights.shape)
-        # exit()
+        self._initialise_weight_values(previous_layer_width)
+
+    def _initialise_weight_values(self, previous_layer_width):
+        rng = np.random.default_rng()
+
+        self.weights = rng.normal(
+            loc=0.0,
+            scale=np.sqrt(2.0 / previous_layer_width),
+            size=(self.width, previous_layer_width),
+        )
+        self.biases = np.zeros(self.width)
 
 
 class NeuralNetwork:
@@ -40,7 +49,7 @@ class NeuralNetwork:
         self.inputs_size = input_size
         self.weights = np.zeros(input_size) 
         self.layers = []
-        self.learning_rate = 0.1
+        self.learning_rate = 0.01
         self.is_verbose = False
 
         self.data = {
@@ -111,7 +120,12 @@ class NeuralNetwork:
 
             y_hat = current_layer
 
-            loss = - np.log(y_hat)
+            # loss = - np.log(y_hat)
+            z = self.layers[-1].z
+            shifted = z - np.max(z)
+            log_probs = shifted - np.log(np.exp(shifted).sum())
+
+            loss = -np.sum(y * log_probs)
 
             # 2) Calculer les gradients
             dLdz = y_hat - y
@@ -154,13 +168,14 @@ class NeuralNetwork:
             self.data['y_hat'].append(np.round(y_hat, 3))
             # self.data['grad_weights'].append(np.round(grad_weights, 3))
             # self.data['grad_biases'].append(np.round(grad_biases, 3))
-            self.data['loss'].append(np.round(loss, 3))
+            self.data["loss"].append(float(loss))
 
 
             if self.is_verbose:
-                print(f"Étape {i + 1} : perte = {loss:.6f}")
+                # print(np.max(loss))
+                print(f"Étape {i + 1} : perte = {np.max(loss):.6f}")
 
-        return self.data['loss']
+        return pd.Series(self.data['loss'])
     
     def print(self):
         print(self.data)
