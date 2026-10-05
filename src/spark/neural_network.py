@@ -24,6 +24,14 @@ def relu(layer_ouput):
 
 # def relu_derivative(layer_ouput):
 #     return np.maximum(layer_ouput)
+import json
+
+ACTIVATIONS = {
+    "identity": identity,
+    "relu": relu,
+    "softmax": softmax,
+}
+
 
 class Layer:
     def __init__(self, width: int, previous_layer_width: int, activation_function: callable):
@@ -99,20 +107,31 @@ class NeuralNetwork:
     def trains_on(self, datapoints, n_steps=50):
         tests, ys = datapoints
         sample_size = len(tests)
+        # print("sample_size", sample_size)
 
         pd.set_option('display.width', None)
         pd.set_option("display.float_format", lambda x: f"{x:.3g}")
         
         for i in range(n_steps):
-            x = tests[i % sample_size]
-            y = ys[i % sample_size]
+            sample_index = i % sample_size
+
+            X = tests[sample_index].flatten()
+            y = ys[sample_index]
 
             # 1) Calcul de la prédiction
-            current_layer = x
+            current_layer = X
 
             for layer in self.layers:
                 layer.input = current_layer
 
+                # print("current_layer")
+                # print(current_layer.shape)
+                # print(current_layer)
+
+                # print("layer.weights")
+                # print(layer.weights.shape)
+                # print(layer.weights.shape)
+                # print(layer.weights)
                 layer.z = layer.weights @  current_layer + layer.biases
 
                 layer.output = layer.activation_function(layer.z)
@@ -160,7 +179,7 @@ class NeuralNetwork:
                 layer.biases -= self.learning_rate * layer.grad_biases
 
 
-            self.data['x'].append(np.round(x, 3))
+            self.data['x'].append(np.round(X, 3))
             self.data['y'].append(y)
             # self.data['w'].append(np.round(layer.weights, 3))
             # self.data['b'].append(np.round(layer.biases, 3))
@@ -180,6 +199,89 @@ class NeuralNetwork:
     def print(self):
         print(self.data)
         print(pd.DataFrame(self.data))
+
+    def save(self, path):
+        config = {
+            "format_version": 1,
+            "input_size": self.inputs_size,
+            "learning_rate": self.learning_rate,
+            "layers": [],
+        }
+        arrays = {}
+
+        for i, layer in enumerate(self.layers):
+            # Retrouver le nom associé à la fonction.
+            activation_name = next(
+                (
+                    name
+                    for name, function in ACTIVATIONS.items()
+                    if function is layer.activation_function
+                ),
+                None,
+            )
+
+            if activation_name is None:
+                raise ValueError(
+                    f"Activation non enregistrée pour la couche {i}."
+                )
+
+            config["layers"].append({
+                "width": layer.width,
+                "activation": activation_name,
+            })
+
+            arrays[f"weights_{i}"] = layer.weights
+            arrays[f"biases_{i}"] = layer.biases
+
+        # Architecture en JSON, paramètres en tableaux NumPy.
+        arrays["config"] = np.array(json.dumps(config))
+
+        # Ouvrir le fichier évite que NumPy ajoute automatiquement ".npz".
+        with open(path, "wb") as file:
+            np.savez_compressed(file, **arrays)
+
+
+    @classmethod
+    def load(cls, path):
+        with np.load(path, allow_pickle=False) as data:
+            config = json.loads(data["config"].item())
+
+            if config["format_version"] != 1:
+                raise ValueError("Version de sauvegarde non prise en charge.")
+
+            network = cls(input_size=config["input_size"])
+            network.learning_rate = config["learning_rate"]
+
+            for i, layer_config in enumerate(config["layers"]):
+                activation_name = layer_config["activation"]
+
+                if activation_name not in ACTIVATIONS:
+                    raise ValueError(
+                        f"Activation inconnue : {activation_name}."
+                    )
+
+                network.add_layer(
+                    layer_width=layer_config["width"],
+                    activation_function=ACTIVATIONS[activation_name],
+                )
+
+                layer = network.layers[-1]
+                weights = data[f"weights_{i}"]
+                biases = data[f"biases_{i}"]
+
+                if (
+                    weights.shape != layer.weights.shape
+                    or biases.shape != layer.biases.shape
+                ):
+                    raise ValueError(
+                        f"Paramètres incompatibles avec la couche {i}."
+                    )
+
+                # Remplacer l'initialisation aléatoire par les paramètres appris.
+                layer.weights = weights.copy()
+                layer.biases = biases.copy()
+
+        return network
 
 
 

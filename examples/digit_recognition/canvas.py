@@ -1,6 +1,11 @@
 # coding: utf-8
 
 import tkinter as tk
+import numpy as np
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+from spark.neural_network import NeuralNetwork
 
 # programme lancé
 #      ↓
@@ -49,6 +54,10 @@ class DigitRecognitionApp:
 
         self.predicted_number = tk.Label(bottom_frame, text="?", font=("Arial", 12, "bold"))
         self.predicted_number.pack(side="left", padx=0)
+
+        self.image = Image.new("L", (280, 280), color=255)
+        self.image_draw = ImageDraw.Draw(self.image)
+
         
     def run(self):
         self.root.mainloop()
@@ -56,23 +65,65 @@ class DigitRecognitionApp:
     def reset_canvas(self):
         self.canvas.delete("all")
 
+        # Effacer également l'image utilisée pour la prédiction.
+        self.image.paste(255, (0, 0, 280, 280))
+
+        self.predicted_number.config(text="?")
+
     def draw(self, event):
         radius = self.slider.get()
 
-        self.canvas.create_oval(
+        bounds = (
             event.x - radius,
             event.y - radius,
             event.x + radius,
             event.y + radius,
+        )
+        
+        self.canvas.create_oval(
+            *bounds,
             fill="black",
             outline="black",
         )
+        
+        self.image_draw.ellipse(bounds, fill=0)
 
-        self.predicted_number.config(text="7")
+        self.predict()
+
+        
+    def predict(self):
+        # Réduire le dessin aux dimensions attendues par MNIST.
+        small_image = self.image.resize(
+            (28, 28),
+            resample=Image.Resampling.LANCZOS,
+        )
+
+        pixels = np.asarray(small_image, dtype=np.float32)
+
+        # Canvas : noir sur blanc.
+        # MNIST : clair sur noir, avec des valeurs entre 0 et 1.
+        inputs = (255.0 - pixels) / 255.0
+
+        probabilities = self.nn.forward(inputs.flatten())
+        digit = int(np.argmax(probabilities))
+
+        self.predicted_number.config(text=str(digit))
+
+    def connect_network(self):
+        NN_PATH = Path(__file__).parent / "mnist.npz"
+        self.nn = NeuralNetwork.load(NN_PATH)
 
 
 def main():    
     app = DigitRecognitionApp("Spark - Digit recognition")
+    app.connect_network()
+    # DATA_PATH = Path(__file__).parent / "data.npz"
+
+    # data = np.load(DATA_PATH)
+    # image = data["image"].astype(float).flatten() / 255.0
+    # prediction = nn.forward(image)
+
+    # print("prediction : ", prediction)
     app.run()
 
     

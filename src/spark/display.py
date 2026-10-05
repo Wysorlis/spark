@@ -2,6 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 
 def display_xor(datapoints, network, error):
@@ -392,3 +393,157 @@ def display_cities(datapoints, network, error):
     ax2.grid(alpha=0.3)
 
     plt.show()
+
+
+
+def show_digit(digit, label):
+    fig, ax = plt.subplots(
+        1, 1,
+        figsize=(10, 8),
+        constrained_layout=True,
+    )
+
+    digit.reshape(28, -1)
+    ax.imshow(digit, cmap="gray")
+    ax.set_title(f"Label : {label}")
+
+    plt.show()
+
+def display_digits(datapoints, network, error, n_digits=10):
+    tests, ys = datapoints
+
+    tests = np.asarray(tests)
+    ys = np.asarray(ys)
+
+    if tests.ndim not in (2, 3):
+        raise ValueError(
+            "Les entrées doivent être de forme "
+            "(n, 28, 28) ou (n, 784)."
+        )
+
+    if tests.ndim == 2 and tests.shape[1] != 28 * 28:
+        raise ValueError("Chaque entrée doit contenir 784 pixels.")
+
+    if tests.ndim == 3 and tests.shape[1:] != (28, 28):
+        raise ValueError("Les images doivent être de taille 28 × 28.")
+
+    # Labels : accepte aussi bien
+    # [5, 0, 4, ...]
+    # que du one-hot :
+    # [[0, 0, ..., 1, ...], ...]
+    if ys.ndim == 2:
+        labels = ys.argmax(axis=1)
+    else:
+        labels = ys.astype(int)
+
+    if len(labels) != len(tests):
+        raise ValueError(
+            "Il doit y avoir autant de labels que d'images."
+        )
+
+    n_digits = min(n_digits, len(tests))
+
+    predictions = []
+
+    for digit in tests[:n_digits]:
+        X = digit.flatten().astype(float)
+
+        # Même normalisation que pendant l'entraînement.
+        if X.max() > 1.0:
+            X /= 255.0
+
+        prediction = network.forward(X)
+        predictions.append(prediction)
+
+    predictions = np.asarray(predictions)
+
+    if predictions.shape != (n_digits, 10):
+        raise ValueError(
+            "Le réseau doit renvoyer 10 sorties par image."
+        )
+
+    predicted_labels = predictions.argmax(axis=1)
+
+    # ---------------------------------------------------------
+    # Figure
+    # ---------------------------------------------------------
+
+    fig = plt.figure(
+        figsize=(12, 7),
+        constrained_layout=True,
+    )
+
+    gs = fig.add_gridspec(
+        2,
+        n_digits,
+        height_ratios=[2, 1],
+    )
+
+    # ---------------------------------------------------------
+    # Chiffres
+    # ---------------------------------------------------------
+
+    for i in range(n_digits):
+        ax = fig.add_subplot(gs[0, i])
+
+        image = tests[i].reshape(28, 28)
+
+        true_label = labels[i]
+        predicted_label = predicted_labels[i]
+        confidence = predictions[i, predicted_label]
+
+        ax.imshow(
+            image,
+            cmap="gray",
+        )
+
+        ax.set_title(
+            f"{true_label} → {predicted_label}\n"
+            f"{confidence:.1%}"
+        )
+
+        ax.axis("off")
+
+    # ---------------------------------------------------------
+    # Loss
+    # ---------------------------------------------------------
+
+    ax_loss = fig.add_subplot(gs[1, :])
+
+    losses = np.asarray(error)
+
+    if losses.ndim == 2 and losses.shape[1] == 1:
+        losses = losses[:, 0]
+
+    if losses.ndim != 1:
+        raise ValueError(
+            "error doit contenir une perte scalaire par étape."
+        )
+
+    ax_loss.plot(
+        np.arange(len(losses)),
+        losses,
+    )
+
+    ax_loss.set(
+        xlabel="Étape",
+        ylabel="Perte",
+        title="Évolution de la perte",
+    )
+
+    ax_loss.grid(alpha=0.3)
+
+    plt.show()
+
+if __name__ == "__main__":
+    DATA_PATH = Path(__file__).parent / "data.npz"
+
+    # from keras.datasets import mnist
+
+    # (X_train, y_train), (X_test, y_test) = mnist.load_data()
+
+    # np.savez(DATA_PATH, image=X_train[0], label=y_train[0])
+
+    data = np.load(DATA_PATH)
+    show_digit(data["image"], data["label"])
+
