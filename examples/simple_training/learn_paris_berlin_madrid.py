@@ -22,7 +22,7 @@ def main():
 
     X_scaled = (X - mean) / std
 
-    error = nn.trains_on((X_scaled, Y), 20000)
+    error = nn.fit((X_scaled, Y), 20000)
 
     display_cities(data_points, nn, error)
 

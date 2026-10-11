@@ -13,7 +13,7 @@ def main():
 
     nn.verbose(True)
     # error = nn.trains_on(data_points, 20_000)
-    error = nn.trains_on(data_points, 2_000)
+    error = nn.fit(data_points, 2_000)
 
     display_xor(data_points, nn, error)
 

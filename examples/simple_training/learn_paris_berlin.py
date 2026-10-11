@@ -12,7 +12,7 @@ def main():
     nn.add_layer(layer_width=2, activation_function=softmax)
 
     nn.verbose(True)
-    error = nn.trains_on(data_points, 20000)
+    error = nn.fit(data_points, 20000)
 
     display_longitude(data_points, nn, error)
 
